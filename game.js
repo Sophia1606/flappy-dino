@@ -6,9 +6,21 @@ const GRAVITY = 1500, FLAP = -430, SPEED = 150, GAP = 175, PIPE_W = 60, SPAWN = 
 let best = 0;
 try { best = +localStorage.getItem("flappydino-best") || 0; } catch (e) {}
 
-// ---------- Colors (follows light/dark mode) ----------
-const dark = matchMedia("(prefers-color-scheme: dark)");
-const colors = () => dark.matches ? { bg: "#202124", fg: "#d0d0d0" } : { bg: "#f7f7f7", fg: "#535353" };
+// ---------- Colors: araw at gabi (feature/design) ----------
+let night = 0; // 0 = araw, 1 = gabi
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, t) => { const x = hex(a), y = hex(b); return "rgb(" + x.map((v, i) => Math.round(v + (y[i] - v) * t)).join(",") + ")"; };
+const colors = () => ({
+  bg: mix("#bfe3ff", "#161c38", night),      // langit
+  fg: mix("#535353", "#f0f0f0", night),      // dino
+  cactus: mix("#3f8f4f", "#5cc27a", night),
+  ground: mix("#8a6d3b", "#c9b27c", night),
+  hill: mix("#a5c9e8", "#262e5a", night),
+  cloud: mix("#ffffff", "#3a4468", night),
+  text: mix("#23364a", "#ffffff", night),
+});
+const clouds = [{ x: 40, y: 80, s: 18 }, { x: 220, y: 150, s: 12 }, { x: 330, y: 40, s: 24 }, { x: 120, y: 230, s: 15 }];
+const stars = Array.from({ length: 28 }, (_, i) => ({ x: (i * 97) % W, y: (i * 53) % (GROUND - 120) + 10, r: 1 + (i % 3) }));
 
 // ---------- Dino sprite (feature/dino) ----------
 const SPRITE = [
@@ -67,7 +79,7 @@ function spawnPipe() {
   pipes.push({ x: W + 10, top, passed: false });
 }
 function drawPillar(x, y, h, flip) {
-  ctx.fillStyle = colors().fg;
+  ctx.fillStyle = colors().cactus;
   ctx.fillRect(x, y, PIPE_W, h);
   // cactus arms
   for (let i = 1; i < Math.floor(h / 70) + 1; i++) {
@@ -88,6 +100,8 @@ function hits() {
 // ---------- Update / draw loop ----------
 function update(dt) {
   t += dt;
+  night += ((Math.floor(score / 10) % 2) - night) * Math.min(1, dt * 1.5);
+  clouds.forEach(c => { c.x -= c.s * dt; if (c.x < -80) { c.x = W + 20; c.y = 40 + Math.random() * 180; } });
   if (state !== "playing") { if (state === "ready") dino.y = H / 2 - DH + Math.sin(t * 4) * 8; return; }
   dino.vy += GRAVITY * dt; dino.y += dino.vy * dt;
   if (dino.y < 0) { dino.y = 0; dino.vy = 0; }
@@ -100,23 +114,39 @@ function update(dt) {
   }
 }
 function text(s, x, y, size, align = "center") {
-  ctx.fillStyle = colors().fg; ctx.font = `bold ${size}px "Courier New", monospace`; ctx.textAlign = align; ctx.fillText(s, x, y);
+  ctx.fillStyle = colors().text; ctx.font = `bold ${size}px "Courier New", monospace`; ctx.textAlign = align; ctx.fillText(s, x, y);
 }
+function cloud(x, y) { ctx.fillRect(x, y + 12, 60, 14); ctx.fillRect(x + 10, y + 4, 36, 12); ctx.fillRect(x + 22, y, 18, 8); }
 function draw() {
-  const { bg, fg } = colors();
-  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-  // ground
-  ctx.fillStyle = fg; ctx.fillRect(0, GROUND, W, 2);
-  for (let i = 0; i < 14; i++) ctx.fillRect(((i * 57 - t * SPEED * (state === "playing" ? 1 : 0)) % (W + 40) + W + 40) % (W + 40) - 20, GROUND + 14 + (i % 3) * 12, 8 + (i % 2) * 6, 2);
+  const c = colors();
+  ctx.fillStyle = c.bg; ctx.fillRect(0, 0, W, H);
+  // bituin (lumalabas sa gabi)
+  ctx.fillStyle = "#fff"; ctx.globalAlpha = night;
+  stars.forEach(st => ctx.fillRect(st.x, st.y, st.r, st.r));
+  // araw -> buwan
+  ctx.globalAlpha = 1 - night; ctx.fillStyle = "#ffd54a"; ctx.beginPath(); ctx.arc(330, 100, 26, 0, 7); ctx.fill();
+  ctx.globalAlpha = night; ctx.fillStyle = "#f4f1de"; ctx.beginPath(); ctx.arc(330, 100, 24, 0, 7); ctx.fill();
+  ctx.fillStyle = c.bg; ctx.beginPath(); ctx.arc(340, 94, 20, 0, 7); ctx.fill();
+  ctx.globalAlpha = 1;
+  // bundok
+  ctx.fillStyle = c.hill;
+  ctx.beginPath(); ctx.moveTo(0, GROUND); ctx.lineTo(70, GROUND - 90); ctx.lineTo(140, GROUND); ctx.lineTo(220, GROUND - 130); ctx.lineTo(310, GROUND); ctx.lineTo(370, GROUND - 70); ctx.lineTo(W, GROUND); ctx.fill();
+  // ulap
+  ctx.fillStyle = c.cloud; clouds.forEach(cl => cloud(cl.x, cl.y));
+  // lupa
+  ctx.fillStyle = c.ground; ctx.fillRect(0, GROUND, W, H - GROUND);
+  ctx.fillStyle = c.fg; ctx.fillRect(0, GROUND, W, 3);
+  ctx.fillStyle = c.cactus;
+  for (let i = 0; i < 14; i++) ctx.fillRect(((i * 57 - t * SPEED * (state === "playing" ? 1 : 0)) % (W + 40) + W + 40) % (W + 40) - 20, GROUND + 16 + (i % 3) * 12, 8 + (i % 2) * 6, 3);
   pipes.forEach(p => { drawPillar(p.x, 0, p.top, true); drawPillar(p.x, p.top + GAP, GROUND - p.top - GAP, false); });
-  drawDino(dino.x, dino.y, Math.floor(t * 10) % 2, Math.max(-0.4, Math.min(0.8, dino.vy / 700)));
+  drawDino(dino.x, dino.y, Math.abs(Math.floor(t * 10)) % 2, Math.max(-0.4, Math.min(0.8, dino.vy / 700)));
   text(String(score), W / 2, 70, 44);
   text("HI " + best, W - 14, 28, 16, "right");
   if (state === "ready") { text("FLAPPY DINO", W / 2, 200, 32); text("Press Space or tap", W / 2, 240, 16); }
   if (state === "over") { text("GAME OVER", W / 2, 250, 36); text("Score " + score + "  Best " + best, W / 2, 290, 18); text("Tap / Space to retry", W / 2, 325, 16); }
 }
 function loop(now) {
-  const dt = Math.min(0.033, (now - last) / 1000); last = now;
+  const dt = Math.max(0, Math.min(0.033, (now - last) / 1000)); last = now;
   update(dt); draw(); requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
